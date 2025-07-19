@@ -6,52 +6,55 @@ from PIL import Image
 from pathlib import Path
 import time
 
-# Konstanta
-IMG_SIZE = (128, 128)  # ← harus cocok dengan input model
-CLASS_NAMES = ["organik 🍂", "anorganik 🗑", "daur ulang ♻️"]
-CLASS_LABELS = ["organik", "anorganik", "daur_ulang"]
-MODEL_PATH = Path("garbage_classifier.h5")
-
 # Load model
+MODEL_PATH = Path("garbage_classifier.h5")
 model = tf.keras.models.load_model(MODEL_PATH)
 
+# 4 kelas (organik, anorganik, daur ulang, bukan sampah)
+CLASS_NAMES = ["organik 🍂", "anorganik 🗑", "daur ulang ♻️", "bukan sampah ❌"]
+CLASS_LABELS = ["organik", "anorganik", "daur_ulang", "bukan_sampah"]
+IMG_SIZE = (244, 244)  # Ukuran sesuai model training
+
 # Konfigurasi Streamlit
-st.set_page_config(page_title="♻️ Deteksi Jenis Sampah", layout="centered")
+st.set_page_config("♻️ Deteksi Jenis Sampah", layout="centered")
 st.title("♻️ Deteksi Jenis Sampah Berbasis Gambar")
 
-# Upload gambar
-uploaded = st.file_uploader("📤 Unggah gambar sampah", type=["jpg", "jpeg", "png"])
-camera = st.camera_input("📷 Atau ambil langsung dengan kamera")
-img_data = uploaded or camera
+# Input gambar
+uploaded = st.file_uploader("📄 Unggah gambar sampah", type=["jpg", "jpeg", "png"])
 
-if img_data:
-    # Tampilkan gambar
-    img = Image.open(img_data).convert("RGB")
+if uploaded:
+    img = Image.open(uploaded).convert("RGB")
     st.image(img, caption="📸 Gambar Input", use_column_width=True)
 
-    # Preprocessing gambar
-    img_arr = np.array(img)
-    img_arr = cv2.resize(img_arr, IMG_SIZE)
-    img_arr = img_arr / 255.0  # Normalisasi 0–1
-    input_tensor = img_arr[None, ...]  # Tambah dimensi batch
+    # Preprocessing
+    img = img.resize(IMG_SIZE)
+    img_arr = np.array(img) / 255.0
+    img_arr = np.expand_dims(img_arr, axis=0)  # Bentuk (1, 244, 244, 3)
 
     # Prediksi
-    st.subheader("🔍 Memproses prediksi...")
-    progress = st.progress(0)
-    pred = model.predict(input_tensor)[0]
+    pred = model.predict(img_arr)[0]  # Output probabilitas
     idx = int(np.argmax(pred))
     confidence = float(pred[idx])
+    label = CLASS_NAMES[idx]
 
-    # Progress bar animasi
+    # Progress bar
+    st.subheader("🔍 Memproses prediksi...")
+    progress = st.progress(0)
     for i in range(int(confidence * 100)):
-        time.sleep(0.01)
+        time.sleep(0.005)
         progress.progress(i + 1)
 
-    # Hasil prediksi
-    st.success(f"🧠 Prediksi: **{CLASS_NAMES[idx]}**")
-    st.write(f"📈 Tingkat keyakinan: `{confidence*100:.2f}%`")
+    # Logika deteksi
+    if label == "bukan sampah ❌" or confidence < 0.70:
+        st.error("❌ Gambar tidak dikenali sebagai jenis sampah.")
+        st.write(f"📊 Tingkat keyakinan: `{confidence * 100:.2f}%`")
+    else:
+        st.success(f"🧠 Prediksi: **{label}**")
+        st.write(f"📊 Tingkat keyakinan: `{confidence * 100:.2f}%`")
 
-    # Grafik probabilitas
+    # Tampilkan grafik probabilitas
     chart_data = {label: float(p) for label, p in zip(CLASS_LABELS, pred)}
     st.subheader("📊 Distribusi Probabilitas Kelas:")
     st.bar_chart(chart_data)
+else:
+    st.info("📅 Silakan unggah gambar terlebih dahulu.")
